@@ -9,7 +9,7 @@ var io = require('socket.io')(server);
 
 function printHelpAndExit(exitCode) {
   console.error([
-    'Usage: ' + __filename + ' [-p] <file-to-watch>',
+    'Usage: ' + __filename + ' [-p] <one-or-more-files-or-directories-to-watch>',
     '',
     'Options:',
     '  -h, --help    Show this screen',
@@ -18,7 +18,8 @@ function printHelpAndExit(exitCode) {
   process.exit(exitCode);
 }
 
-var fileName, allowPublicAccess;
+var fileNames, allowPublicAccess;
+var fileNames = [];
 
 process.argv.slice(2).forEach(function(arg) {
   if (arg == '-h' || arg == '--help') {
@@ -27,37 +28,75 @@ process.argv.slice(2).forEach(function(arg) {
   if (arg == '-p' || arg == '--public') {
     allowPublicAccess = true;
   } else {
-    fileName = arg;
+    fileNames.push(arg);
   }
 });
 
-if (!fileName) {
+if (fileNames.length == 0) {
   printHelpAndExit(1);
 }
 
-function getSnapshot() {
+// For accessing info for a file
+var snapshotsByFile = {};
+var pathToFile = {};
+
+// Get changes
+function getSnapshot(fileKey) {
+  var fileName = pathToFile[fileKey];
   return {
     content: fs.readFileSync(fileName, 'utf8'),
     modifiedAt: fs.statSync(fileName).mtime.getTime(),
   };
 }
 
-var snapshots = [getSnapshot()];
+// Used to map a file name to a key
+function getFileKey(fileName) {
+  return fileName.substring(fileName.lastIndexOf('/')+1);
+}
+
+// Listener for file changes
+var fileWatchListener = function(eventType, fileName) {
+  var fileKey = getFileKey(fileName);
+  var snapshots = snapshotsByFile[fileKey];
+  var last = snapshots[snapshots.length - 1];
+  var current = getSnapshot(fileKey);
+  if (current.content !== last.content && current.content.length > 0) {
+    io.emit('change', fileKey, current);
+    snapshots.push(current);
+    snapshotsByFile[fileKey] = snapshots;
+  }
+};
+
+function initFileInfo(fileName) {
+  var fileKey = getFileKey(fileName);
+  pathToFile[fileKey] = fileName;
+  var snapshot = getSnapshot(fileKey);
+  snapshotsByFile[fileKey] = [snapshot];
+}
+
+// Initialize
+fileNames.forEach(function(fileName) {
+  // If input is directory, get all the .js files under it
+  // set up the initial info
+  if (fs.statSync(fileName).isDirectory()) {
+    var files = fs.readdirSync(fileName);
+    files.forEach(function(file) {
+      if (path.extname(file) === ".js") {
+        initFileInfo(fileName+'/'+file);
+      }
+    });
+  } else {
+    initFileInfo(fileName);
+  }
+  // Watch file or directory
+  fs.watch(fileName, fileWatchListener);
+});
 
 io.on('connection', function (socket) {
-  socket.emit('init', snapshots);
+  socket.emit('init', snapshotsByFile);
 });
 
-fs.watch(fileName, function() {
-  var last = snapshots[snapshots.length - 1];
-  var current = getSnapshot();
-  if (current.content !== last.content && current.content.length > 0) {
-    io.emit('change', current);
-    snapshots.push(current);
-  }
-});
-
-console.log('Serving ' + fileName + ' on http://localhost:3030/');
+console.log('Serving files on http://localhost:3030/');
 
 if (allowPublicAccess) {
   var ngrok = require('ngrok');

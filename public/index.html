@@ -6,6 +6,7 @@
   <script src="./highlight.min.js"></script>
   <script src="./diff.js"></script>
   <link rel="stylesheet" href="./tomorrow.css">
+  <link rel="stylesheet" href="./tab.css">
   <style type="text/css">
     body {
       color: white;
@@ -13,7 +14,7 @@
     pre {
       position: relative;
     }
-    #changes {
+    .changes {
       position: absolute;
       top: 0;
       left: 0;
@@ -34,33 +35,75 @@
   </style>
 </head>
 <body class="hljs">
-  <pre><code id="main"></code><code id="changes"></code></pre>
+  <div id="current">
+  </div>
+  <ul id="tabMenu" class="tab">
+  </ul>
+
+  <div id="tabContent">
+  </div>
 
   <script>
     var socket = io(document.location.href);
-    var snapshots = [];
-    var current = 0;
+    var snapshotsByFile = {};
+    var currentByFile = {};
 
     socket.on('init', function(initialHistory) {
-      snapshots = initialHistory;
-      current = snapshots.length - 1;
-      update();
+      snapshotsByFile = initialHistory;
+      setupTabMenu();
+      setupTabContent();
+      Object.keys(snapshotsByFile).forEach(function(fileKey) {
+        var snapshots = snapshotsByFile[fileKey];
+        currentByFile[fileKey] = snapshots.length - 1;
+        update(fileKey);
+      });
+      // Show initial tab
+      document.getElementById('tabMenu_0').click();
     });
-    socket.on('change', function(snapshot) {
+    socket.on('change', function(fileKey, snapshot) {
+      var current = currentByFile[fileKey];
+      var snapshots = snapshotsByFile[fileKey];
       if (current === snapshots.length - 1) {
         current += 1;
       }
       snapshots.push(snapshot);
-      update();
+      currentByFile[fileKey] = current;
+      snapshotsByFile[fileKey] = snapshots;
+      update(fileKey);
     });
 
-    function update() {
-      document.title = current + 1 + '/' + snapshots.length;
+    function setupTabMenu() {
+      var tabHTML = '';
+      var tabCount = 0;
+      Object.keys(snapshotsByFile).forEach(function(key) {
+        tabHTML += '<li>';
+        tabHTML += '<a id=tabMenu_'+tabCount+' href="#" class="tablinks" onclick="openTab(event, \''+key+'\')">'+key+'</a></li>'
+        tabHTML += '</li>';
+        tabCount++;
+      });
+      tabMenu.innerHTML = tabHTML;
+    }
+
+    function setupTabContent() {
+      var tabHTML = '';
+      Object.keys(snapshotsByFile).forEach(function(key) {
+        tabHTML += '<div id="'+key+'" class="tabcontent">';
+        tabHTML += '  <pre><code id="main_'+key+'"></code><code class="changes" id="changes_'+key+'"></code></pre>';
+        tabHTML += '</div>';
+      });
+      tabContent.innerHTML = tabHTML;
+    }
+
+    function update(fileKey) {
+      var snapshots = snapshotsByFile[fileKey];
+      var current = currentByFile[fileKey];
+      document.getElementById('current').innerHTML = current + 1 + '/' + snapshots.length;
+      //var document.title = current + 1 + '/' + snapshots.length;
       var code = snapshots[current].content;
-      main.innerHTML = hljs.highlight('javascript', code).value;
+      document.getElementById("main_"+fileKey).innerHTML = hljs.highlight('javascript', code).value;
 
       if (snapshots.length <= 1 || current === 0) {
-        changes.innerHTML = '';
+        document.getElementById("changes_"+fileKey).innerHTML = '';
         return;
       }
 
@@ -69,7 +112,7 @@
         snapshots[current].content
       );
 
-      changes.innerHTML = diff.map(function(part) {
+      document.getElementById("changes_"+fileKey).innerHTML = diff.map(function(part) {
         if (part.removed || !part.count) {
           return '';
         }
@@ -89,18 +132,47 @@
       }
     }
 
+    var currentTab = '';
+    function openTab(evt, tabName) {
+      // Declare all variables
+      var i, tabcontent, tablinks;
+
+      // Get all elements with class="tabcontent" and hide them
+      tabcontent = document.getElementsByClassName("tabcontent");
+      for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+      }
+
+      // Get all elements with class="tablinks" and remove the class "active"
+      tablinks = document.getElementsByClassName("tablinks");
+      for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+      }
+
+      // Show the current tab, and add an "active" class to the link that opened the tab
+      document.getElementById(tabName).style.display = "block";
+      evt.currentTarget.className += " active";
+      currentTab = tabName;
+      update(currentTab);
+    }
+
     document.onkeydown = function(e) {
-      if (e.keyCode === 39 /* Right */) {
+      var fileKey = currentTab;
+      var snapshots = snapshotsByFile[fileKey];
+      var current = currentByFile[fileKey];
+      if (e.keyCode === 39) { // Right
         current += 1;
-      } else if (e.keyCode === 37 /* Left */) {
+      } else if (e.keyCode === 37) { // Left
         current -= 1;
       } else {
         return;
       }
       current = Math.min(current, snapshots.length - 1);
       current = Math.max(current, 0);
-      update();
+      currentByFile[fileKey] = current;
+      update(fileKey);
     }
+
   </script>
 </body>
 </html>

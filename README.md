@@ -2,7 +2,7 @@
 
 ```
 $ npm install -g live-coding
-$ live-coding path/to/file.js
+$ live-coding path/to/file.js path/to-directory-with-js-files/
 ```
 
 Use `--public` option to start ngrok that will allow external
