@@ -71,27 +71,49 @@
       snapshotsByFile[fileKey] = snapshots;
       update(fileKey);
     });
+    socket.on('add', function(fileKey, snapshot) {
+      snapshotsByFile[fileKey] = [snapshot];
+      currentByFile[fileKey] = 0;
+      setupTabMenu(fileKey);
+      setupTabContent(fileKey);
+      update(fileKey);
+    });
 
-    function setupTabMenu() {
+    function setupTabMenu(key) {
       var tabHTML = '';
       var tabCount = 0;
-      Object.keys(snapshotsByFile).forEach(function(key) {
+      if (key) {
+        tabCount = Object.keys(snapshotsByFile).length;
         tabHTML += '<li>';
         tabHTML += '<a id=tabMenu_'+tabCount+' href="#" class="tablinks" onclick="openTab(event, \''+key+'\')">'+key+'</a></li>'
         tabHTML += '</li>';
-        tabCount++;
-      });
-      tabMenu.innerHTML = tabHTML;
+        tabMenu.insertAdjacentHTML('beforeend', tabHTML);
+      } else {
+        Object.keys(snapshotsByFile).forEach(function(key) {
+          tabHTML += '<li>';
+          tabHTML += '<a id=tabMenu_'+tabCount+' href="#" class="tablinks" onclick="openTab(event, \''+key+'\')">'+key+'</a></li>'
+          tabHTML += '</li>';
+          tabCount++;
+        });
+        tabMenu.innerHTML = tabHTML;
+      }
     }
 
-    function setupTabContent() {
+    function setupTabContent(key) {
       var tabHTML = '';
-      Object.keys(snapshotsByFile).forEach(function(key) {
+      if (key) {
         tabHTML += '<div id="'+key+'" class="tabcontent">';
         tabHTML += '  <pre><code id="main_'+key+'"></code><code class="changes" id="changes_'+key+'"></code></pre>';
         tabHTML += '</div>';
-      });
-      tabContent.innerHTML = tabHTML;
+        tabContent.insertAdjacentHTML('beforeend', tabHTML);
+      } else {
+        Object.keys(snapshotsByFile).forEach(function(key) {
+          tabHTML += '<div id="'+key+'" class="tabcontent">';
+          tabHTML += '  <pre><code id="main_'+key+'"></code><code class="changes" id="changes_'+key+'"></code></pre>';
+          tabHTML += '</div>';
+        });
+        tabContent.innerHTML = tabHTML;
+      }
     }
 
     function update(fileKey) {

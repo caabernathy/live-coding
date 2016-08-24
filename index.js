@@ -57,13 +57,22 @@ function getFileKey(fileName) {
 // Listener for file changes
 var fileWatchListener = function(eventType, fileName) {
   var fileKey = getFileKey(fileName);
-  var snapshots = snapshotsByFile[fileKey];
-  var last = snapshots[snapshots.length - 1];
-  var current = getSnapshot(fileKey);
-  if (current.content !== last.content && current.content.length > 0) {
-    io.emit('change', fileKey, current);
-    snapshots.push(current);
-    snapshotsByFile[fileKey] = snapshots;
+  // Check for possible new file
+  if (fileKey in snapshotsByFile) {
+    var snapshots = snapshotsByFile[fileKey];
+    var last = snapshots[snapshots.length - 1];
+    var current = getSnapshot(fileKey);
+    if (current.content !== last.content && current.content.length > 0) {
+      io.emit('change', fileKey, current);
+      snapshots.push(current);
+      snapshotsByFile[fileKey] = snapshots;
+    }
+  } else {
+    // Temp hack since don't know how to get the directory
+    pathToFile[fileKey] = '/Users/caabernathy/Facebook/Events/MEAPartnerWorkshop/CodeLab/quizzer/ReactNative/js/'+fileKey;
+    var snapshot = getSnapshot(fileKey);
+    snapshotsByFile[fileKey] = [snapshot];
+    io.emit('add', fileKey, snapshot);
   }
 };
 
@@ -100,7 +109,9 @@ console.log('Serving files on http://localhost:3030/');
 
 if (allowPublicAccess) {
   var ngrok = require('ngrok');
-  ngrok.connect(3030, function (err, url) {
+  ngrok.connect({
+    addr: 3030
+  }, function (err, url) {
     console.log('Public URL:', url);
   });
 }
